@@ -39,7 +39,6 @@ component("url") {
     "url_canon_host.cc",
     "url_canon_internal.cc",
     "url_canon_internal.h",
-    "url_canon_internal_file.h",
     "url_canon_ip.cc",
     "url_canon_ip.h",
     "url_canon_mailtourl.cc",
@@ -69,6 +68,7 @@ component("url") {
   public_deps = [
     "//base",
     "//build:robolectric_buildflags",
+    "//net:cronet_buildflags",
   ]
 
   configs += [ "//build/config/compiler:wexit_time_destructors" ]

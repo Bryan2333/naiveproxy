@@ -76,6 +76,9 @@
 
 #if BUILDFLAG(IS_APPLE)
 #include "base/allocator/early_zone_registration_apple.h"
+#if PA_BUILDFLAG(USE_ALLOCATOR_SHIM)
+#include "partition_alloc/shim/early_zone_registration_utils_apple.h"
+#endif
 #include "base/apple/scoped_nsautorelease_pool.h"
 #endif
 
@@ -100,16 +103,16 @@ constexpr int kExpectedMaxUsers = 8;
 constexpr net::NetworkTrafficAnnotationTag kTrafficAnnotation =
     net::DefineNetworkTrafficAnnotation("naive", "");
 
-std::unique_ptr<base::Value::Dict> GetConstants() {
-  base::Value::Dict constants_dict = net::GetNetConstants();
-  base::Value::Dict dict;
+std::unique_ptr<base::DictValue> GetConstants() {
+  base::DictValue constants_dict = net::GetNetConstants();
+  base::DictValue dict;
   std::string os_type = base::StringPrintf(
       "%s: %s (%s)", base::SysInfo::OperatingSystemName().c_str(),
       base::SysInfo::OperatingSystemVersion().c_str(),
       base::SysInfo::OperatingSystemArchitecture().c_str());
   dict.Set("os_type", os_type);
   constants_dict.Set("clientInfo", std::move(dict));
-  return std::make_unique<base::Value::Dict>(std::move(constants_dict));
+  return std::make_unique<base::DictValue>(std::move(constants_dict));
 }
 }  // namespace
 
@@ -167,7 +170,7 @@ std::unique_ptr<URLRequestContext> BuildCertURLRequestContext(NetLog* net_log) {
       ConfiguredProxyResolutionService::CreateWithoutProxyResolver(
           std::make_unique<ProxyConfigServiceFixed>(
               ProxyConfigWithAnnotation(proxy_config, kTrafficAnnotation)),
-          net_log);
+          /*host_resolver_for_override_rules=*/nullptr, net_log);
   proxy_service->ForceReloadProxyConfig();
   builder.set_proxy_resolution_service(std::move(proxy_service));
 
@@ -232,7 +235,7 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
       ConfiguredProxyResolutionService::CreateWithoutProxyResolver(
           std::make_unique<ProxyConfigServiceFixed>(
               ProxyConfigWithAnnotation(proxy_config, kTrafficAnnotation)),
-          net_log);
+          /*host_resolver_for_override_rules=*/nullptr, net_log);
   proxy_service->ForceReloadProxyConfig();
   builder.set_proxy_resolution_service(std::move(proxy_service));
 
@@ -285,9 +288,45 @@ std::unique_ptr<URLRequestContext> BuildURLRequestContext(
 }  // namespace net
 
 int main(int argc, char* argv[]) {
+  for (int i = 1; i < argc; ++i) {
+    std::string_view arg = argv[i];
+    if (arg == "-h" || arg == "--help") {
+      std::cout << "Usage: naive { OPTIONS | config.json }\n"
+                   "\n"
+                   "Options:\n"
+                   "-h, --help                 Show this message\n"
+                   "--version                  Print version\n"
+                   "--listen=<proto>://[addr][:port] [--listen=...]\n"
+                   "                           proto: socks, http\n"
+                   "                                  redir (Linux only)\n"
+                   "--proxy=<proto>://[<user>:<pass>@]<hostname>[:<port>]\n"
+                   "                           proto: https, quic\n"
+                   "--insecure-concurrency=<N> Use N connections, insecure\n"
+                   "--extra-headers=...        Extra headers split by CRLF\n"
+                   "--host-resolver-rules=...  Resolver rules\n"
+                   "--resolver-range=...       Redirect resolver range\n"
+                   "--log[=<path>]             Log to stderr, or file\n"
+                   "--log-net-log=<path>       Save NetLog\n"
+                   "--ssl-key-log-file=<path>  Save SSL keys for Wireshark\n"
+                   "--no-post-quantum          No post-quantum key agreement\n"
+                << std::endl;
+      return EXIT_SUCCESS;
+    }
+    if (arg == "--version") {
+      std::cout << "naive " << version_info::GetVersionNumber() << std::endl;
+      return EXIT_SUCCESS;
+    }
+  }
+
   // chrome/app/chrome_exe_main_mac.cc: main()
 #if BUILDFLAG(IS_APPLE)
-  partition_alloc::EarlyMallocZoneRegistration();
+  if (allocator_shim::IsZoneAlreadyRegistered(
+          allocator_shim::kDelegatingZoneName) ||
+      allocator_shim::IsZoneAlreadyRegistered(
+          allocator_shim::kPartitionAllocZoneName)) {
+  } else {
+    partition_alloc::EarlyMallocZoneRegistration();
+  }
 #endif
 
   // content/app/content_main.cc: RunContentProcess()
@@ -313,6 +352,8 @@ int main(int argc, char* argv[]) {
   // content/app/content_main.cc: RunContentProcess()
   base::CommandLine::Init(argc, argv);
 
+  const auto& proc = *base::CommandLine::ForCurrentProcess();
+
   // content/app/content_main.cc: RunContentProcess()
   base::EnableTerminationOnHeapCorruption();
 
@@ -333,7 +374,15 @@ int main(int argc, char* argv[]) {
   // logic is working correctly. If not causes a hard crash, as its unexpected
   // absence has security implications.
 #if PA_BUILDFLAG(USE_PARTITION_ALLOC)
+#if BUILDFLAG(IS_APPLE)
+  if (!base::allocator::IsAllocatorInitialized()) {
+    std::cerr << "Warning: allocator shim is not initialized on this Apple "
+                 "runtime; continuing without the startup CHECK."
+              << std::endl;
+  }
+#else
   CHECK(base::allocator::IsAllocatorInitialized());
+#endif
 #endif
 
   // content/app/content_main.cc: RunContentProcess()
@@ -359,19 +408,18 @@ int main(int argc, char* argv[]) {
   url::AddStandardScheme("socks",
                          url::SCHEME_WITH_HOST_PORT_AND_USER_INFORMATION);
   url::AddStandardScheme("redir", url::SCHEME_WITH_HOST_AND_PORT);
-  net::ClientSocketPoolManager::set_max_sockets_per_pool(
+  net::ClientSocketPoolManager::set_socket_soft_cap_per_pool_for_test(
       net::HttpNetworkSession::NORMAL_SOCKET_POOL,
       kDefaultMaxSocketsPerPool * kExpectedMaxUsers);
   net::ClientSocketPoolManager::set_max_sockets_per_proxy_chain(
       net::HttpNetworkSession::NORMAL_SOCKET_POOL,
       kDefaultMaxSocketsPerPool * kExpectedMaxUsers);
-  net::ClientSocketPoolManager::set_max_sockets_per_group(
+  net::ClientSocketPoolManager::set_max_sockets_per_group_for_test(
       net::HttpNetworkSession::NORMAL_SOCKET_POOL,
       kDefaultMaxSocketsPerGroup * kExpectedMaxUsers);
 
-  const auto& proc = *base::CommandLine::ForCurrentProcess();
   const auto& args = proc.GetArgs();
-  base::Value::Dict config_dict;
+  base::DictValue config_dict;
   if (args.empty() && proc.argv().size() >= 2) {
     config_dict = GetSwitchesAsValue(proc);
   } else {
@@ -391,37 +439,9 @@ int main(int argc, char* argv[]) {
                 << ") " << error_message << std::endl;
       return EXIT_FAILURE;
     }
-    if (const base::Value::Dict* dict = value->GetIfDict()) {
+    if (const base::DictValue* dict = value->GetIfDict()) {
       config_dict = dict->Clone();
     }
-  }
-
-  if (config_dict.contains("h") || config_dict.contains("help")) {
-    std::cout << "Usage: naive { OPTIONS | config.json }\n"
-                 "\n"
-                 "Options:\n"
-                 "-h, --help                 Show this message\n"
-                 "--version                  Print version\n"
-                 "--listen=<proto>://[addr][:port] [--listen=...]\n"
-                 "                           proto: socks, http\n"
-                 "                                  redir (Linux only)\n"
-                 "--proxy=<proto>://[<user>:<pass>@]<hostname>[:<port>]\n"
-                 "                           proto: https, quic\n"
-                 "--insecure-concurrency=<N> Use N connections, insecure\n"
-                 "--extra-headers=...        Extra headers split by CRLF\n"
-                 "--host-resolver-rules=...  Resolver rules\n"
-                 "--resolver-range=...       Redirect resolver range\n"
-                 "--log[=<path>]             Log to stderr, or file\n"
-                 "--log-net-log=<path>       Save NetLog\n"
-                 "--ssl-key-log-file=<path>  Save SSL keys for Wireshark\n"
-                 "--no-post-quantum          No post-quantum key agreement\n"
-              << std::endl;
-    exit(EXIT_SUCCESS);
-  }
-
-  if (config_dict.contains("version")) {
-    std::cout << "naive " << version_info::GetVersionNumber() << std::endl;
-    exit(EXIT_SUCCESS);
   }
 
   net::NaiveConfig config;

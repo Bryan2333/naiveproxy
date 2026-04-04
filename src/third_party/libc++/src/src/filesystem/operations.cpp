@@ -40,18 +40,13 @@
 #include <fcntl.h> /* values for fchmodat */
 #include <time.h>
 
-// since Linux 4.5 and FreeBSD 13, but the Linux libc wrapper is only provided by glibc >= 2.27 and musl
-#if defined(__linux__)
-#  if defined(_LIBCPP_GLIBC_PREREQ)
-#    if _LIBCPP_GLIBC_PREREQ(2, 27)
-#      define _LIBCPP_FILESYSTEM_USE_COPY_FILE_RANGE
-#    endif
-#  elif _LIBCPP_HAS_MUSL_LIBC
-#    define _LIBCPP_FILESYSTEM_USE_COPY_FILE_RANGE
-#  endif
-#elif defined(__FreeBSD__)
+// since Linux 4.5 and FreeBSD 13, but the Linux libc wrapper is only provided
+// by glibc >= 2.27. Some older musl/OpenWrt SDKs do not declare
+// copy_file_range(), so prefer falling back to sendfile/fstream there.
+#if _LIBCPP_GLIBC_PREREQ(2, 27) || defined(__FreeBSD__)
 #  define _LIBCPP_FILESYSTEM_USE_COPY_FILE_RANGE
 #endif
+
 #if __has_include(<sys/sendfile.h>)
 #  include <sys/sendfile.h>
 #  define _LIBCPP_FILESYSTEM_USE_SENDFILE
