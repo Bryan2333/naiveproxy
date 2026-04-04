@@ -1,0 +1,15 @@
+diff --git a/src/net/android/network_library_stub.cc b/src/net/android/network_library_stub.cc
+index 48bcd6c4..ca0989d8 100644
+--- a/src/net/android/network_library_stub.cc
++++ b/src/net/android/network_library_stub.cc
+@@ -99,5 +99,10 @@ void RegisterQuicConnectionClosePayload(int, base::span<uint8_t>) {
+ 
+ void UnregisterQuicConnectionClosePayload(int) {
+ }
++
++NetworkBlockedReason GetNetworkBlockedReason(int fd) {
++  return NetworkBlockedReason::kNone;
++}
++
+ }  // namespace android
+ }  // namespace net

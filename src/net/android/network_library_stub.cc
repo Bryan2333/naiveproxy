@@ -99,5 +99,10 @@ void RegisterQuicConnectionClosePayload(int, base::span<uint8_t>) {
 
 void UnregisterQuicConnectionClosePayload(int) {
 }
+
+NetworkBlockedReason GetNetworkBlockedReason(int fd) {
+  return NetworkBlockedReason::kNone;
+}
+
 }  // namespace android
 }  // namespace net

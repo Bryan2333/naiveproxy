@@ -4,7 +4,10 @@
 
 #include "third_party/jni_zero/common_apis.h"
 
+#include <atomic>
+
 #include "third_party/jni_zero/generate_jni/JniUtil_jni.h"
+#include "third_party/jni_zero/jni_zero_internal.h"
 #include "third_party/jni_zero/system_jni/Arrays_jni.h"
 #include "third_party/jni_zero/system_jni/Boolean_jni.h"
 #include "third_party/jni_zero/system_jni/Collection_jni.h"
@@ -16,7 +19,23 @@
 #include "third_party/jni_zero/system_jni/Map_jni.h"
 #include "third_party/jni_zero/system_jni/Process_jni.h"
 #include "third_party/jni_zero/system_jni/Runnable_jni.h"
-#include "third_party/jni_zero/system_jni_unchecked_exceptions/ByteBuffer_jni.h"
+
+namespace {
+
+jclass GetByteBufferClass(JNIEnv* env) {
+  static std::atomic<jclass> g_byte_buffer_class;
+  return jni_zero::internal::LazyGetClass(env, "java/nio/ByteBuffer",
+                                          &g_byte_buffer_class);
+}
+
+jmethodID GetAllocateDirectMethod(JNIEnv* env) {
+  static std::atomic<jmethodID> g_allocate_direct_method;
+  return jni_zero::MethodID::LazyGet<jni_zero::MethodID::TYPE_STATIC>(
+      env, GetByteBufferClass(env), "allocateDirect",
+      "(I)Ljava/nio/ByteBuffer;", &g_allocate_direct_method);
+}
+
+}  // namespace
 
 namespace jni_zero {
 
@@ -186,8 +205,10 @@ bool ProcessIsIsolated(JNIEnv* env) {
 //
 
 ScopedJavaLocalRef<jobject> ByteBufferAllocateDirect(JNIEnv* env, int size) {
-  ScopedJavaLocalRef<jobject> ret =
-      JNI_ByteBuffer::Java_ByteBuffer_allocateDirect(env, size);
+  ScopedJavaLocalRef<jobject> ret = ScopedJavaLocalRef<jobject>::Adopt(
+      env,
+      env->CallStaticObjectMethod(GetByteBufferClass(env),
+                                  GetAllocateDirectMethod(env), size));
   ClearException(env);
   return ret;
 }

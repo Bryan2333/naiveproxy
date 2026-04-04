@@ -8,12 +8,6 @@ config("jni_include_dir") {
   include_dirs = [ jni_headers_dir ]
 }
 
-generate_jar_jni("system_jni_unchecked_exceptions") {
-  classes = [ "java/nio/ByteBuffer.class" ]
-  visibility = [ ":*" ]
-  unchecked_exceptions = true
-}
-
 # This is the public target that we intend others to use.
 component("jni_zero") {
   public = [
@@ -54,10 +48,6 @@ component("jni_zero") {
   } else if (is_robolectric) {
     public_configs = [ "//third_party/jdk:jdk" ]
   }
-
-  deps = [
-    ":system_jni_unchecked_exceptions($default_toolchain)",
-  ]
 }
 
 if (enable_java_templates && is_android) {

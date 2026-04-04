@@ -1,0 +1,13 @@
+diff --git a/src/get-clang.sh b/src/get-clang.sh
+index 4525d5e2..47abaaf5 100755
+--- a/src/get-clang.sh
++++ b/src/get-clang.sh
+@@ -78,7 +78,7 @@ case "$target_os" in
+   ;;
+   android)
+     case "$target_cpu" in
+-      arm64) WITH_PGO=android-arm64;;
++      arm64) WITH_PGO=android-desktop-arm64;;
+       *) WITH_PGO=android-arm32;;
+     esac
+   ;;

@@ -478,8 +478,15 @@ template("generate_jni_impl") {
         }
       }
     } else {
-      java_group("${_final_target_name}_java") {
-        # Allows target to appear as a public_dep of another generate_jni().
+      if (enable_java_templates) {
+        java_group("${_final_target_name}_java") {
+          # Allows target to appear as a public_dep of another generate_jni().
+        }
+      } else {
+        group("${_final_target_name}_java") {
+          # Non-Chromium Android builds can disable Java templates globally.
+          # Fall back to a plain group so generate_jar_jni() remains usable.
+        }
       }
     }
 
