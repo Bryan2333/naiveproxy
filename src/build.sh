@@ -35,7 +35,9 @@ case "$host_os" in
     fi
   ;;
   win)
-    if [ -f "$HOME"/.cargo/bin/sccache* ]; then
+    if command -v sccache >/dev/null 2>&1; then
+      CCACHE=sccache
+    elif [ -f "$HOME"/.cargo/bin/sccache* ]; then
       export PATH="$PATH:$HOME/.cargo/bin"
       CCACHE=sccache
     fi
