@@ -183,7 +183,7 @@ QuicSession::QuicSession(
           config.GetInitialSessionFlowControlWindowToSend(),
           std::max(kSessionReceiveWindowLimit,
                    config.GetInitialSessionFlowControlWindowToSend()),
-          perspective() == Perspective::IS_SERVER, nullptr),
+          /*should_auto_tune_receive_window=*/true, nullptr),
       control_frame_manager_(this),
       datagram_queue_(this, std::move(datagram_observer)),
       is_configured_(false),
